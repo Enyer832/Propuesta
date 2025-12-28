@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Matrix System — Corazón final (funcional)</title>
+<style>
+  :root{ --green:#00ff00; --darkred:#330000; }
+
+  html,body{height:100%; margin:0; background:#000; font-family:monospace; overflow:hidden}
+
+  /* CANVASES */
+  canvas{ position:fixed; top:0; left:0; width:100%; height:100%; }
+
+  /* Z-index ordenado */
+  #matrixCanvas{ z-index:1; }
+  #staticCanvas{ z-index:2; display:none; } /* static arriba de la cascada */
+
+  /* OVERLAY (oscurecer) */
+  #overlay{
+    position:fixed; inset:0; background:#000;
+    z-index:8; pointer-events:none;
+    clip-path:circle(0% at 50% 50%); transition:clip-path 8s linear;
+  }
+
+  /* BOTÓN e input y texto */
+  #startButton{
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+    z-index:12;
+    background:#000; color:var(--green); border:1px solid var(--green);
+    padding:12px 22px; cursor:pointer; font-size:18px;
+  }
+  #startButton:hover{ color:tomato; border-color:tomato; }
+
+  #loadingText{
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+    color:var(--green); z-index:13; display:none; font-size:22px; text-align:center;
+    white-space:pre;
+  }
+
+  #nameInput{
+    position:fixed; left:50%; top:60%; transform:translate(-50%,-50%);
+    z-index:14; display:none;
+    background:#000; color:var(--green); border:1px solid var(--green);
+    padding:8px 10px; font-size:18px;
+  }
+
+  /* VENTANA de advertencia (SIEMPRE arriba) */
+  #warningWindow{
+    position:fixed; left:50%; top:18%; transform:translateX(-50%);
+    width:680px; max-width:90vw; min-height:220px; background:#000;
+    border:2px solid var(--green); z-index:30; display:none;
+    box-sizing:border-box; color:var(--green);
+  }
+  #warningTitle{
+    height:36px; line-height:36px; background:#001200; padding-left:12px;
+    border-bottom:1px solid var(--green);
+    font-weight:700;
+  }
+  #warningBody{
+    padding:20px; text-align:center; font-size:20px;
+    min-height:110px; display:flex; align-items:center; justify-content:center;
+  }
+  #progressWrap{ padding:14px 20px 20px; box-sizing:border-box; }
+  #progressBar{ width:100%; height:28px; border:2px solid var(--green); background:#000; }
+  #progressFill{ height:100%; width:0%; background:var(--green); }
+
+  /* Clase para palpitar rojo en la ventana (animación) */
+  .alert-red{
+    animation: pulseRed 0.9s ease-in-out infinite alternate;
+    border-color:tomato !important;
+    color:tomato !important;
+  }
+  @keyframes pulseRed{
+    from { background: #100; box-shadow: 0 0 8px rgba(255,50,50,0.08); }
+    to   { background: #300; box-shadow: 0 0 18px rgba(255,80,80,0.18); }
+  }
+
+  /* Mensaje sobre corazón */
+  #heartMessage {
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    z-index:40;
+    color:#ff7777; /* rojo tenue */
+    font-size:28px;
+    text-align:center;
+    display:none;
+    pointer-events:none;
+    white-space:pre;
+    font-family: monospace;
+  }
+
+  /* BOTÓN AÑADIDO - mínimo CSS */
+  #continueButton{
+    position:fixed;
+    left:50%;
+    top:62%;
+    transform:translate(-50%,-50%);
+    z-index:41;
+    display:none;
+    background:#000;
+    color:#ff7777;
+    border:1px solid #ff7777;
+    padding:12px 26px;
+    font-size:18px;
+    cursor:pointer;
+  }
+  #continueButton:hover{
+    color:#fff;
+    border-color:#fff;
+  }
+
+  /* ===========================
+     POST-IT INICIAL (DISEÑO HACKER)
+     =========================== */
+  #postitOverlay{
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.75));
+    z-index:99999;
+    pointer-events:auto;
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+  #postit{
+    width:360px;
+    max-width:92%;
+    background:linear-gradient(180deg, rgba(2,8,2,0.98), rgba(5,12,8,0.99));
+    color:#bfffdc;
+    padding:18px;
+    border-radius:10px;
+    border:1px solid rgba(0,255,136,0.12);
+    box-shadow:
+      0 14px 36px rgba(0,0,0,0.7),
+      0 0 28px rgba(0,255,136,0.03) inset;
+    font-family:monospace;
+    text-align:left;
+    transform:translateZ(0);
+  }
+  #postit .pt-title{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:8px;
+  }
+  #postit .pt-title h3{
+    margin:0;
+    font-size:16px;
+    color:#b6ffcf;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+  #postit .pt-led{
+    width:12px; height:12px; border-radius:50%;
+    background:#00ff88; box-shadow:0 0 12px rgba(0,255,136,0.25);
+    border:1px solid rgba(255,255,255,0.03);
+  }
+  #postit .pt-body{
+    margin-top:8px;
+    font-size:14px;
+    color:#caffdf;
+    opacity:0.98;
+    line-height:1.35;
+  }
+  #postit .pt-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; }
+  #postit .pt-btn{
+    background:transparent;
+    color:#bafccd;
+    border:1px solid rgba(0,255,136,0.12);
+    padding:8px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    font-family:monospace;
+  }
+  #postit .pt-btn.primary{
+    background:linear-gradient(180deg, rgba(0,255,136,0.06), rgba(0,255,136,0.02));
+    box-shadow: 0 6px 18px rgba(0,255,136,0.03);
+  }
+  #postit::after{
+    content:"";
+    position:absolute;
+    left:0; right:0; bottom:-8px;
+    height:6px;
+    background:linear-gradient(90deg, rgba(0,255,136,0.02), rgba(0,255,136,0.12), rgba(0,255,136,0.02));
+    border-radius:6px;
+    filter:blur(6px);
+    opacity:0.9;
+  }
+
+  /* small responsive */
+  @media(max-width:420px){
+    #postit{ width:320px; padding:14px; }
+    #postit .pt-title h3{ font-size:14px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- audio (usa la URL pública de GitHub o tu ruta relativa) -->
+  <audio id="Audioo" loop src="https://github.com/Enyer832/Propuesta/raw/refs/heads/main/Sonidos/Sonidos_Fondos/Sonido.mp3"></audio>
+
+  <audio id="click" src="https://github.com/Enyer832/Propuesta/raw/refs/heads/main/Sonidos/Sonidos_clicks/Boton_click.mp3"></audio>
+
+  <!-- canvases -->
+  <canvas id="matrixCanvas"></canvas>
+  <canvas id="staticCanvas"></canvas>
+
+  <!-- overlay, controles -->
+  <div id="overlay"></div>
+  <button id="startButton">Iniciar</button>
+  <div id="loadingText"></div>
+  <input id="nameInput" placeholder="Escribe tu nombre..." />
+
+  <!-- ventana de advertencia -->
+  <div id="warningWindow" role="dialog" aria-hidden="true">
+    <div id="warningTitle">Seguridad del dispositivo</div>
+    <div id="warningBody"></div>
+    <div id="progressWrap">
+      <div id="progressBar"><div id="progressFill"></div></div>
+    </div>
+  </div>
+
+  <!-- mensaje sobre corazón -->
+  <div id="heartMessage"></div>
+
+  <!-- BOTÓN AÑADIDO (único cambio visible) -->
+  <button id="continueButton">Entrar al juego</button>
+
+  <!-- POST-IT INICIAL (DISEÑO HACKER) -->
+  <div id="postitOverlay" aria-hidden="false">
+    <div id="postit" role="dialog" aria-modal="true">
+      <div class="pt-title">
+        <h3>Reglas del sistema</h3>
+        <div class="pt-led" aria-hidden="true"></div>
+      </div>
+      <div class="pt-body">
+        <div>
+          1) INICIO DEL DESAFIO
+        </div>
+      </div>
+      <div class="pt-actions">
+        <button id="postitPlay" class="pt-btn primary">Continuar y reproducir</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================
+   Setup canvases y utilidades
+   ============================ */
+const matrixCanvas = document.getElementById('matrixCanvas');
+const mctx = matrixCanvas.getContext('2d');
+const staticCanvas = document.getElementById('staticCanvas');
+const sctx = staticCanvas.getContext('2d');
+
+function resizeAll(){
+  matrixCanvas.width = staticCanvas.width = innerWidth;
+  matrixCanvas.height = staticCanvas.height = innerHeight;
+}
+addEventListener('resize', resizeAll);
+resizeAll();
+
+/* ====== CASCADA MATRIX (original) ====== */
+const fontSize = 16;
+let cols = Math.floor(matrixCanvas.width / fontSize);
+let drops = new Array(cols);
+for(let i=0;i<cols;i++){ drops[i] = Math.random()*matrixCanvas.height/fontSize; }
+
+function drawMatrix(){
+  mctx.fillStyle = "rgba(0,0,0,0.08)";
+  mctx.fillRect(0,0,matrixCanvas.width,matrixCanvas.height);
+  mctx.fillStyle = "#00ff00";
+  mctx.font = fontSize + "px monospace";
+  for(let i=0;i<drops.length;i++){
+    const ch = Math.random() > 0.5 ? '0' : '1';
+    mctx.fillText(ch, i*fontSize, drops[i]*fontSize);
+    drops[i] += 1;
+    if(drops[i]*fontSize > matrixCanvas.height) drops[i] = 0;
+  }
+}
+let matrixTimer = setInterval(drawMatrix, 33);
+
+/* ====== UI elements ====== */
+const overlay = document.getElementById('overlay');
+const startButton = document.getElementById('startButton');
+const loadingText = document.getElementById('loadingText');
+const nameInput = document.getElementById('nameInput');
+const warningWindow = document.getElementById('warningWindow');
+const warningBody = document.getElementById('warningBody');
+const progressFill = document.getElementById('progressFill');
+const heartMessage = document.getElementById('heartMessage');
+
+/* ====== START BUTTON flow ====== */
+startButton.addEventListener('click', () => {
+
+  // Se bloquea si el postit aún visible (overlay del postit captura clicks)
+  // Reproducir audio ya se hace al aceptar en el postit.
+  overlay.style.clipPath = 'circle(0px at 50% 50%)';
+  overlay.style.display = 'block';
+  setTimeout(()=> overlay.style.clipPath = 'circle(150% at 50% 50%)', 10);
+
+  startButton.style.display = 'none';
+
+  // show "Iniciando juego..." letter by letter after 8s
+  setTimeout(()=>{
+    loadingText.style.display = 'block';
+    loadingText.style.top = '40%';
+    loadingText.textContent = "";
+    const txt = "Iniciando juego.................................";
+    let i=0;
+    const t = setInterval(()=>{
+      loadingText.textContent += txt.charAt(i) || '';
+      i++;
+      if(i >= txt.length) clearInterval(t);
+    }, 50);
+    // after full text show "Introduce tu nombre" then input
+    setTimeout(()=>{
+      loadingText.textContent = "Introduce tu nombre";
+      loadingText.style.top = '50%'; // center vertically for identity later
+      loadingText.style.fontSize = '22px';
+      nameInput.style.display = 'block';
+      nameInput.focus();
+    }, 8000 + txt.length*50 + 300);
+  }, 8000);
+});
+
+/* ====== Guardar nombre and continue (with console effect + scanning) ====== */
+nameInput.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' && nameInput.value.trim() !== ''){
+    const nombre = nameInput.value.trim();
+    localStorage.setItem('usuarioNombre', nombre);
+
+    // hide input
+    nameInput.style.display = 'none';
+
+    // show "Identidad confirmada." con efecto consola (centrado)
+    loadingText.style.display = 'block';
+    loadingText.style.top = '50%';
+    loadingText.style.left = '50%';
+    loadingText.style.transform = 'translate(-50%,-50%)';
+    loadingText.textContent = '';
+    const identityText = "Identidad confirmada";
+    let idx = 0;
+
+    const typer = setInterval(()=>{
+      loadingText.textContent += identityText.charAt(idx) || '';
+      idx++;
+      if(idx >= identityText.length){
+        clearInterval(typer);
+
+        // luego efecto "escaneando..." con puntos durante ~3 segundos
+        const SCAN_DURATION = 3000; // ms
+        const DOT_INTERVAL = 300;   // ms
+        let start = Date.now();
+        let dotCount = 0;
+        const maxDots = 5;
+        const scanTimer = setInterval(()=>{
+          // update dots
+          dotCount = (dotCount % maxDots) + 1;
+          loadingText.textContent = identityText + ".".repeat(dotCount);
+
+          if(Date.now() - start >= SCAN_DURATION){
+            clearInterval(scanTimer);
+            // breve pausa y abrir ventana
+            setTimeout(()=>{
+              loadingText.style.display = 'none';
+              // asegurar overlay oculto para que ventana no quede cubierta
+              overlay.style.display = 'none';
+              startWarningSequence();
+            }, 200);
+          }
+        }, DOT_INTERVAL);
+      }
+    }, 55); // velocidad de escritura (ajustable)
+  }
+});
+
+/* ====== Warning sequence - robusto ====== */
+function startWarningSequence(){
+  warningWindow.style.display = 'block';
+  warningWindow.setAttribute('aria-hidden','false');
+
+  const messages = [
+    "ADVERTENCIA, entrando en zona de preguntas",
+    "ADVERTENCIA",
+    "PELIGRO: entrando en zona restringida..."
+  ];
+
+  const totalDuration = 15000; // 15s
+  const changeInterval = 2500; // cambiar mensaje cada 2.5s
+  let index = 0;
+  const startTime = Date.now();
+
+  // reset progress bar
+  progressFill.style.width = '0%';
+  // ensure overlay hidden
+  overlay.style.display = 'none';
+
+  // message / palpitation loop
+  const messageTimer = setInterval(()=>{
+    // set message
+    warningBody.textContent = messages[index % messages.length];
+
+    // toggle alert-red class to make the window palpitate in red
+    warningWindow.classList.toggle('alert-red');
+
+    index++;
+    const elapsed = Date.now() - startTime;
+    if(elapsed >= totalDuration){
+      clearInterval(messageTimer);
+      // finish: hide window and show static matrix
+      warningWindow.style.display = 'none';
+      warningWindow.classList.remove('alert-red');
+      showStaticMatrix();
+    }
+  }, changeInterval);
+
+  // progress bar smoother
+  const progressTimer = setInterval(()=>{
+    const percent = Math.min(((Date.now()-startTime)/totalDuration)*100, 100);
+    progressFill.style.width = percent + "%";
+    if(percent >= 100) clearInterval(progressTimer);
+  }, 50);
+}
+
+/* ====== Static matrix (final) - rápido y activo + corazón ====== */
+const STATIC_DRAW_MS = 40;       // ms entre frames (menos = más rápido)
+const STATIC_FLIP_CHANCE = 0.10; // probabilidad por celda de cambiar
+
+function showStaticMatrix(){
+  // ensure overlay hidden
+  overlay.style.display = 'none';
+
+  // stop dynamic matrix updates
+  clearInterval(matrixTimer);
+
+  // prepare grid based on resized canvas
+  const colsS = Math.floor(staticCanvas.width / fontSize);
+  const rowsS = Math.floor(staticCanvas.height / fontSize);
+  const grid = new Array(rowsS);
+  for(let r=0;r<rowsS;r++){
+    grid[r] = new Array(colsS);
+    for(let c=0;c<colsS;c++) grid[r][c] = Math.random() > 0.5 ? '0' : '1';
+  }
+
+  staticCanvas.style.display = 'block';
+
+  // ---- build heart mask (boolean grid) ----
+  const heartMask = new Array(rowsS);
+  for(let r=0;r<rowsS;r++){
+    heartMask[r] = new Array(colsS).fill(false);
+  }
+
+  // scale and center for implicit heart equation
+  // We'll map grid coords to a -1.5..1.5 box (x horizontal, y vertical inverted)
+  for(let r=0;r<rowsS;r++){
+    for(let c=0;c<colsS;c++){
+      const nx = (c - colsS/2) / (colsS/2) * 1.6; // horizontal scale
+      const ny = - (r - rowsS/2) / (rowsS/2) * 1.6; // vertical inverted
+      // heart implicit: (x^2 + y^2 -1)^3 - x^2 * y^3 <= 0
+      const v = Math.pow(nx*nx + ny*ny -1, 3) - (nx*nx)*(ny*ny*ny);
+      if(v <= 0) heartMask[r][c] = true;
+    }
+  }
+
+  // collect heart cells and shuffle reveal order
+  const heartCells = [];
+  for(let r=0;r<rowsS;r++){
+    for(let c=0;c<colsS;c++){
+      if(heartMask[r][c]) heartCells.push({r,c});
+    }
+  }
+  // shuffle (Fisher-Yates)
+  for(let i=heartCells.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [heartCells[i], heartCells[j]] = [heartCells[j], heartCells[i]];
+  }
+
+  // reveal controls
+  let revealIndex = 0;
+  const revealPerTick = Math.max(1, Math.floor(heartCells.length / 120)); // spread over ~120 ticks
+  const totalReveal = heartCells.length;
+
+  // redraw loop with reveal and random flips elsewhere
+  const drawTimer = setInterval(()=>{
+    sctx.fillStyle = '#000';
+    sctx.fillRect(0,0,staticCanvas.width,staticCanvas.height);
+    sctx.font = fontSize + "px monospace";
+
+    // reveal some heart cells this tick
+    for(let k=0;k<revealPerTick && revealIndex<totalReveal;k++, revealIndex++){
+      const cell = heartCells[revealIndex];
+      grid[cell.r][cell.c] = '1'; // make it a 1 (we'll draw red)
+    }
+
+    // draw whole grid; heart cells in red, others green and occasionally flip
+    for(let r=0;r<rowsS;r++){
+      for(let c=0;c<colsS;c++){
+        if(heartMask[r][c]){
+          // if revealed (i.e., grid has been set to '1' via revealIndex)
+          if(grid[r][c] === '1'){
+            sctx.fillStyle = '#ff4444'; // rojo fuerte
+            sctx.fillText('1', c*fontSize, r*fontSize);
+          } else {
+            // not yet revealed: draw normal green noise
+            sctx.fillStyle = '#00ff00';
+            sctx.fillText(Math.random() > 0.5 ? '0' : '1', c*fontSize, r*fontSize);
+          }
+        } else {
+          // non-heart: flip randomly
+          if(Math.random() < STATIC_FLIP_CHANCE) grid[r][c] = grid[r][c] === '0' ? '1' : '0';
+          sctx.fillStyle = '#00ff00';
+          sctx.fillText(grid[r][c], c*fontSize, r*fontSize);
+        }
+      }
+    }
+
+    // if reveal complete -> stop reveal loop and show message
+    if(revealIndex >= totalReveal){
+      clearInterval(drawTimer);
+      // small delay to let final heart settle
+      setTimeout(()=> {
+        const name = localStorage.getItem('usuarioNombre') || 'Usuario';
+        const text = `${name}, ¿estás lista?`;
+        heartMessage.style.display = 'block';
+        heartMessage.textContent = '';
+
+        /* ---------- FIX: escribir correctamente el nombre ----------
+           Usamos Array.from(text) para iterar por "caracteres" correctamente
+           (maneja bien emojis y parejas surrogate). Así no se pierde ni se
+           escribe mal ninguna letra. ------------------------------------------------ */
+        const chars = Array.from(text);
+        let pi = 0;
+        const typeInt = setInterval(()=>{
+          heartMessage.textContent += chars[pi] || '';
+          pi++;
+          if(pi >= chars.length){
+            clearInterval(typeInt);
+            // mostrar el botón añadido una vez termina el tipeo
+            const continueButton = document.getElementById('continueButton');
+            if(continueButton) continueButton.style.display = 'block';
+          }
+        }, 55); // velocidad letra por letra (ajustable)
+
+      }, 250);
+    }
+  }, STATIC_DRAW_MS);
+}
+
+/* comportamiento del botón añadido */
+const continueButton = document.getElementById('continueButton');
+if(continueButton){
+  continueButton.addEventListener('click', ()=>{
+    // acción por defecto: redirigir a archivo2.html (puedes cambiar la URL)
+    window.location.href = 'archivo2.html';
+  });
+}
+
+/* ====== POST-IT HANDLER: reproducir audio y obligar a usar el botón ====== */
+(function(){
+  const postitOverlay = document.getElementById('postitOverlay');
+  const btnPlay  = document.getElementById('postitPlay');
+  const audioEl  = document.getElementById('Audioo');
+  const clickEl  = document.getElementById('click');
+
+  // --- AJUSTE DE VOLÚMENES (solo esto se cambió) ---
+  if(audioEl) audioEl.volume = 1.0; // volumen máximo del fondo
+  if(clickEl) clickEl.volume = 1.0; // volumen máximo de click
+
+  // reproducir click para todos los botones
+  document.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(clickEl){
+        try{ clickEl.currentTime = 0; clickEl.play(); }catch(e){}
+      }
+    });
+  });
+
+  function hideOverlay(){
+    if(!postitOverlay) return;
+    postitOverlay.style.display = 'none';
+    postitOverlay.setAttribute('aria-hidden','true');
+  }
+
+  // botón único: reproduce y cierra (autoplay allowed because user clicked)
+  if(btnPlay){
+    btnPlay.addEventListener('click', ()=>{
+      if(audioEl){
+        audioEl.currentTime = 0;
+        const p = audioEl.play();
+        if(p && p.catch) p.catch(()=>{ /* si falla por política, se hará audible al siguiente click del usuario */ });
+      }
+      hideOverlay();
+    });
+  }
+
+  // NO permitir cerrar haciendo click fuera: no hay handler para overlay clicks
+
+  // mostrar overlay al cargar
+  window.addEventListener('DOMContentLoaded', ()=>{
+    if(postitOverlay){
+      postitOverlay.style.display = 'flex';
+      postitOverlay.setAttribute('aria-hidden','false');
+      // prevenir cierre al click fuera; sólo animación pequeña si hacen click fuera
+      postitOverlay.addEventListener('click', (e)=>{
+        if(e.target === postitOverlay){
+          const box = document.getElementById('postit');
+          if(box){
+            box.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-6px)' }, { transform: 'translateY(0)' }], { duration: 260, easing: 'ease-in-out' });
+          }
+        }
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>
