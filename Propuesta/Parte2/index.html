@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Matrix Menu — Archivos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{
+  --bg:#121212;
+  --panel:#004400;
+  --text:#00ff88;
+  --locked:#66aa88;
+  --accent:#00ffaa;
+}
+/* base */
+*{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+html,body{height:100%;margin:0;background:var(--bg);font-family:monospace;color:var(--text);overflow:hidden;}
+/* panel izquierdo */
+#sidePanel{position:fixed;left:0;top:0;width:28%;height:100%;background:var(--panel);padding:16px 8px;display:flex;flex-direction:column;justify-content:space-between;z-index:5;}
+.file{position:relative;padding:16px 12px;background:rgba(0,255,0,0.06);border:1px solid rgba(0,255,0,0.15);clip-path: polygon(0 0,92% 0,100% 50%,92% 100%,0 100%);transition:.18s;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.file .icon{ font-size:20px; width:28px; text-align:center; } .file .name{ font-size:15px; }
+.file.active{outline:3px solid rgba(0,255,136,0.18);background: rgba(0,120,0,0.12);}
+.file.locked{ color:var(--locked); background:rgba(0,0,0,0.18); border-color:rgba(255,255,255,0.06); cursor:default;}
+@keyframes shake{0%{transform:translateX(0)}25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}100%{transform:translateX(0)}}
+.file.shake{ animation:shake .22s linear; }
+.separator{height:32px;font-size:18px;color:var(--accent);letter-spacing:3px;overflow:hidden;white-space:nowrap;text-align:center;}
+/* contenido derecho */
+#content{position:fixed;left:28%;top:0;width:72%;height:100%;background:rgba(0,120,0,0.12);padding:26px;overflow:auto;z-index:4;text-align:center;}
+#content h2{ color:var(--accent); margin:0 0 8px 0;}
+#content p{ margin:0; opacity:.9;}
+
+/* boton inicial */
+.start-wrap{ display:flex; align-items:center; justify-content:center; height:70vh; }
+#startBtn{ padding:16px 28px; font-size:20px; cursor:pointer; border:2px solid var(--accent); background:rgba(0,255,136,0.06); color:var(--accent); border-radius:8px;}
+
+/* quiz */
+#quizArea{ width:100%; max-width:640px; margin:10px auto 40px; text-align:left; display:none; }
+.q-block{ background: rgba(0,0,0,0.16); border:1px solid rgba(0,255,136,0.08); padding:12px; margin:10px 0; border-radius:6px; }
+.q-block strong{ display:block; margin-bottom:8px; color:var(--accent); }
+.option-label{ display:flex; align-items:center; gap:10px; padding:8px; border-radius:6px; margin:6px 0; cursor:pointer; user-select:none; }
+.option-label .opt-text{ flex:1; }
+.option-label input[type="radio"]{ transform:scale(1.15); }
+.option-label input[type="radio"]:checked + .opt-text{ background: linear-gradient(90deg, rgba(0,255,136,0.08), rgba(0,255,136,0.03)); padding:6px 8px; border-radius:4px; color:#dfffe7; }
+#submitBtn{ display:block; margin:18px auto; padding:10px 16px; border-radius:8px; border:2px solid var(--accent); background:rgba(0,255,136,0.06); color:var(--text); font-size:16px; cursor:pointer; }
+
+/* overlays (post-its y modales) */
+.overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); z-index:9999; pointer-events:auto; }
+.postit{ width:320px; max-width:90%; padding:18px; border-radius:8px; box-shadow:2px 2px 12px rgba(0,0,0,0.6); text-align:center; }
+.postit.warn{ background:#ff5555; color:#fff; border:2px solid #aa0000; }
+.postit.ok{ background:#0b3; color:#001; border:2px solid #093; }
+
+@media(max-width:520px){ #sidePanel{ width:38%; } #content{ left:38%; width:62%; padding:16px; } #startBtn{ font-size:18px; padding:12px 18px; } #quizArea{ padding:0 6px; } }
+</style>
+</head>
+<body>
+
+<!-- PANEL -->
+<div id="sidePanel">
+  <div class="file active" data-name="archivo_confidencial_1" onclick="handleClick(this)"><div class="icon">📂</div><div class="name">archivo_confidencial_1</div></div>
+  <div class="separator"></div>
+  <div class="file locked" data-name="archivo_confidencial_2" onclick="handleClick(this)"><div class="icon">🔒</div><div class="name">archivo_confidencial_2</div></div>
+  <div class="separator"></div>
+  <div class="file locked" data-name="archivo_confidencial_3" onclick="handleClick(this)"><div class="icon">🔒</div><div class="name">archivo_confidencial_3</div></div>
+  <div class="separator"></div>
+  <div class="file locked" data-name="archivo_confidencial_4" onclick="handleClick(this)"><div class="icon">🔒</div><div class="name">archivo_confidencial_4</div></div>
+  <div class="separator"></div>
+  <div class="file" id="preguntaFinal" data-name="Pregunta_Final" onclick="handleClick(this)"><div class="icon">❤️</div><div class="name">Pregunta_Final</div></div>
+</div>
+
+<!-- CONTENIDO -->
+<div id="content">
+  <h2>Sistema</h2>
+  <p id="info">Seleccione un archivo desbloqueado.</p>
+
+  <!-- START BUTTON (siempre en DOM) -->
+  <div class="start-wrap" id="startWrap"><div id="startBtn">Conoces a Enyer?</div></div>
+
+  <!-- QUIZ AREA (siempre en DOM pero hidden hasta abrir) -->
+  <div id="quizArea"></div>
+</div>
+
+<!-- POST-IT INICIAL -->
+<div id="postitOverlay" class="overlay" aria-hidden="true">
+  <div id="postit" class="postit" role="dialog" aria-modal="true" style="background:#ffee88;color:#000;border:2px solid #ddaa00;">
+    <div><strong>Reglas del juego</strong></div>
+    <p style="margin-top:8px;font-size:14px;">
+      1) Completa cada archivo en orden.<br>
+      2) Al completar uno se desbloquea el siguiente.<br>
+      3) Al completar cada uno desbloqueas parte de la contraseña.<br>
+      4) El archivo final requiere contraseña.
+    </p>
+    <button id="postitClose" style="margin-top:12px;padding:8px 12px;border:none;background:#004400;color:#ffee88;border-radius:4px;">Entendido</button>
+  </div>
+</div>
+
+<!-- POST-IT ERROR -->
+<div id="errorOverlay" class="overlay" aria-hidden="true">
+  <div class="postit warn" role="alert">
+    <div id="errorText">Hay algo incorrecto, revisa tus respuestas.</div>
+    <button id="errorClose" style="margin-top:12px;padding:8px 12px;border:none;background:#770000;color:#fff;border-radius:4px;">Cerrar</button>
+  </div>
+</div>
+
+<!-- POST-IT SUCCESS -->
+<div id="successOverlay" class="overlay" aria-hidden="true">
+  <div class="postit ok" role="status">
+    <div>¡Correcto! Has desbloqueado la primera parte de la contraseña:</div>
+    <h2 style="margin:8px 0 0 0;">Amor</h2>
+    <button id="successClose" style="margin-top:12px;padding:8px 12px;border:none;background:#004400;color:#ffee88;border-radius:4px;">Continuar</button>
+  </div>
+</div>
+
+<!-- MODAL CONTRASEÑA -->
+<div id="modalOverlay" class="overlay" aria-hidden="true">
+  <div id="modal" role="dialog" aria-modal="true" style="background:#061206;border:2px solid var(--accent);padding:18px;color:var(--text);border-radius:6px;max-width:90%;width:320px;text-align:center;">
+    <div><strong>Ingrese la contraseña</strong></div>
+    <input id="modalPass" type="password" placeholder="Contraseña" style="width:100%;margin-top:8px;padding:8px;background:#001200;color:var(--text);border:1px solid rgba(0,255,136,0.12);">
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button id="btnClose" class="btn" style="flex:1;padding:8px;border-radius:6px;">Cerrar</button>
+      <button id="btnConfirm" class="btn primary" style="flex:1;padding:8px;border-radius:6px;border:2px solid var(--accent);background:rgba(0,255,136,0.06);">Confirmar</button>
+    </div>
+    <div id="modalMsg" style="margin-top:10px;color:var(--accent);font-size:14px;display:none;"></div>
+  </div>
+</div>
+
+<script>
+/* separadores */
+function randomLine(length){ let s=''; for(let i=0;i<length;i++) s += Math.random()>0.5 ? '1' : '0'; return s; }
+function refreshSeparators(){ document.querySelectorAll('.separator').forEach(s=>{ const width = Math.max(16, Math.floor(window.innerWidth/20)); s.textContent = randomLine(width); }); }
+setInterval(refreshSeparators,100); refreshSeparators();
+
+/* Estado: solo en sesión (no persistencia automática) */
+let quizCompleted = false;
+
+/* post-it inicial */
+const postitOverlay = document.getElementById('postitOverlay');
+document.getElementById('postitClose').addEventListener('click', ()=> { postitOverlay.style.display='none'; postitOverlay.setAttribute('aria-hidden','true'); });
+window.addEventListener('DOMContentLoaded', ()=> { postitOverlay.style.display='flex'; postitOverlay.setAttribute('aria-hidden','false'); });
+
+/* datos quiz (no cambian) */
+const quizData = [
+  { q: "¿Cual es mi comida favorita?", opts:["La pizza","La zanahoria","La comida saludable"], correct:2 },
+  { q: "¿Cual es mi color favorito?", opts:["Verde","Negro","Morado"], correct:1 },
+  { q: "¿Que es lo que mas me gusta hacer?", opts:["Programar","Hacer ejercicio","Dibujar"], correct:1 },
+  { q: "¿Cual es mi estilo de ropa favorito?", opts:["Old money","Clásico","Elegante"], correct:2 },
+  { q: "¿Me gusta hacer decoraciones?", opts:["si es para mi","si es para regalar dependa la persona","si me pagan"], correct:1 },
+  { q: "¿Cuanto mido?", opts:["1.70","1.79","1.50"], correct:1 },
+  { q: "¿Cual es mi filosofia?", opts:["nihilista","Estoica","budismo"], correct:1 },
+  { q: "¿cual es mi team?", opts:["calor","Frio","Ambas"], correct:1 },
+  { q: "¿que instrumento puedo tocar?", opts:["piano","Violín","Batería"], correct:0 },
+  { q: "¿que genero musical me gusta mas?", opts:["Merengue","dembow","Salsa"], correct:2 }
+];
+
+/* refs */
+const startWrap = document.getElementById('startWrap');
+const startBtn = document.getElementById('startBtn');
+const quizArea = document.getElementById('quizArea');
+const content = document.getElementById('content');
+
+/* start button -> abrir quiz */
+startBtn.addEventListener('click', ()=> {
+  if(postitOverlay.style.display === 'flex') return;
+  startWrap.style.transition='opacity .35s'; startWrap.style.opacity='0';
+  setTimeout(()=> { startWrap.style.display='none'; renderQuiz(); },360);
+});
+
+function renderQuiz(){
+  quizArea.innerHTML = '';
+  quizArea.style.display = 'block';
+  quizData.forEach((q,i)=>{
+    const block = document.createElement('div'); block.className = 'q-block';
+    block.innerHTML = `<strong>${i+1}. ${q.q}</strong>`;
+    q.opts.forEach((opt,j)=>{
+      const id = `q${i}_opt${j}`;
+      const label = document.createElement('label'); label.className='option-label';
+      label.innerHTML = `<input type="radio" name="q${i}" id="${id}" value="${j}"><span class="opt-text">${opt}</span>`;
+      block.appendChild(label);
+    });
+    quizArea.appendChild(block);
+  });
+  const submit = document.createElement('button'); submit.id='submitBtn'; submit.textContent='Enviar';
+  submit.addEventListener('click', validateQuiz);
+  quizArea.appendChild(submit);
+  if(!content.contains(quizArea)) content.appendChild(quizArea);
+}
+
+/* validar respuestas */
+function validateQuiz(){
+  let ok = true;
+  for(let i=0;i<quizData.length;i++){
+    const sel = document.querySelector(`input[name="q${i}"]:checked`);
+    if(!sel){ ok=false; break; }
+    if(parseInt(sel.value,10) !== quizData[i].correct){ ok=false; break; }
+  }
+  if(!ok){
+    document.getElementById('errorOverlay').style.display='flex';
+    document.getElementById('errorOverlay').setAttribute('aria-hidden','false');
+  } else {
+    // mostramos POST-IT success. El desbloqueo real ocurre al pulsar Continuar.
+    document.getElementById('successOverlay').style.display='flex';
+    document.getElementById('successOverlay').setAttribute('aria-hidden','false');
+  }
+}
+
+/* overlays control */
+document.getElementById('errorClose').addEventListener('click', ()=> {
+  document.getElementById('errorOverlay').style.display='none';
+  document.getElementById('errorOverlay').setAttribute('aria-hidden','true');
+});
+
+/* Continuar: aquí **sí** marcamos completado en sesión */
+document.getElementById('successClose').addEventListener('click', ()=> {
+  document.getElementById('successOverlay').style.display='none';
+  document.getElementById('successOverlay').setAttribute('aria-hidden','true');
+  quizCompleted = true; // clave: solo ahora se considera completado
+  // mostrar palabra y ocultar quiz UI
+  startWrap.style.display='none';
+  quizArea.style.display='none';
+  content.innerHTML = '<h2>Contraseña desbloqueada</h2><p style="font-size:22px;font-weight:bold;text-align:center;">Amor</p>';
+});
+
+/* panel clicks */
+const files = document.querySelectorAll('.file');
+let currentActive = document.querySelector('.file.active');
+
+function handleClick(el){
+  if(postitOverlay.style.display === 'flex') return;
+  if(el.classList.contains('locked')){
+    el.classList.add('shake');
+    setTimeout(()=> el.classList.remove('shake'),260);
+    document.getElementById('info').textContent='Acceso restringido. Completa el nodo anterior.';
+    return;
+  }
+  const name = el.dataset.name || el.querySelector('.name').textContent;
+  if(name === 'Pregunta_Final'){ openModal(); return; }
+  if(currentActive) currentActive.classList.remove('active');
+  el.classList.add('active'); currentActive = el;
+  if(name === 'archivo_confidencial_1'){
+    if(quizCompleted){
+      // muestra palabra solo si completaste en esta sesión
+      content.innerHTML = '<h2>Contraseña desbloqueada</h2><p style="font-size:22px;font-weight:bold;text-align:center;">Amor</p>';
+      quizArea.style.display='none';
+      startWrap.style.display='none';
+    } else {
+      // no mostrar palabra; mostrar el estado inicial con el botón de inicio
+      // mantenemos el startWrap en DOM (si fue eliminado antes lo volvemos a mostrar)
+      content.innerHTML = '<h2>Sistema</h2><p id="info">Completa el quiz para desbloquear.</p>';
+      // reattach startWrap and quizArea if needed:
+      if(!content.contains(startWrap)) content.appendChild(startWrap);
+      startWrap.style.display='flex';
+      quizArea.style.display='none';
+      // asegurar el botón nuevo está enlazado (si startWrap fue reañadido)
+      setTimeout(()=> {
+        const newStart = document.getElementById('startBtn');
+        if(newStart) {
+          newStart.onclick = ()=> {
+            if(postitOverlay.style.display === 'flex') return;
+            startWrap.style.transition='opacity .35s'; startWrap.style.opacity='0';
+            setTimeout(()=> { startWrap.style.display='none'; renderQuiz(); },360);
+          };
+        }
+      },50);
+    }
+    return;
+  }
+  // otros archivos: placeholder
+  content.innerHTML = `<h2>${name}</h2><p>Archivo cargado correctamente. Aquí irá el puzzle/actividad.</p><p style="margin-top:12px;opacity:.85;">(Completa este nodo para desbloquear el siguiente.)</p>`;
+}
+
+/* modal contraseña (igual que antes) */
+const modalOverlay = document.getElementById('modalOverlay');
+const btnClose = document.getElementById('btnClose');
+const btnConfirm = document.getElementById('btnConfirm');
+const modalPass = document.getElementById('modalPass');
+const modalMsg = document.getElementById('modalMsg');
+
+function openModal(){
+  // ocultar overlays conflictivos por si acaso
+  postitOverlay.style.display='none';
+  document.getElementById('errorOverlay').style.display='none';
+  document.getElementById('successOverlay').style.display='none';
+  modalOverlay.style.display='flex';
+  modalOverlay.setAttribute('aria-hidden','false');
+  modalPass.value=''; modalMsg.style.display='none'; modalPass.focus();
+}
+function closeModal(){ modalOverlay.style.display='none'; modalOverlay.setAttribute('aria-hidden','true'); modalMsg.style.display='none'; }
+btnConfirm.addEventListener('click', ()=>{
+  const v = modalPass.value.trim();
+  if(v === ''){ modalMsg.style.display='block'; modalMsg.textContent='Ingresa una contraseña.'; return; }
+  if(v === '1234'){ modalMsg.style.display='block'; modalMsg.textContent='Contraseña correcta. Acceso concedido.'; setTimeout(()=> closeModal(),900); }
+  else{ modalMsg.style.display='block'; modalMsg.textContent='Contraseña incorrecta.'; }
+});
+btnClose.addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', (e)=> { if(e.target === modalOverlay) closeModal(); });
+modalPass.addEventListener('keydown', (e)=> { if(e.key === 'Enter') btnConfirm.click(); });
+</script>
+</body>
+</html>
